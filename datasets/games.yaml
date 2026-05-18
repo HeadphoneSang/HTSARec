@@ -1,4 +1,4 @@
-# Atomic File Format
+# Atomic File Format 
 field_separator: "\t"           # (str) Separator of different columns in atomic files.
 seq_separator: " "              # (str) Separator inside the sequence features.
 
