@@ -25,7 +25,6 @@ epochs: 300                     # (int) The number of training epochs.
 train_batch_size: 512          # (int) The training batch size.
 learner: adam                   # (str) The name of used optimizer.
 learning_rate: 0.001            # (float) Learning rate.
-#Sequential 模型计算交叉熵(CE)损失的时候不需要负采样。因为pointwise需要计算所有样本的得分，然后计算目标位置的交叉熵损失
 #train_neg_sample_args:          # (dict) Negative sampling configuration for model training.
 #  distribution: uniform         # (str) The distribution of negative items.
 #  sample_num: 1                 # (int) The sampled num of negative items.
@@ -49,7 +48,6 @@ eval_args:                      # (dict) 4 keys: group_by, order, split, and mod
   group_by: user                # (str) The grouping strategy ranging in ['user', 'none'].
   order: TO                     # (str) The ordering strategy ranging in ['RO', 'TO'].
   mode: labeled                  # (str) The evaluation mode ranging in ['full','unixxx','popxxx','labeled'].
-  #这里的mode=full，就是对pointwise的所有项目进行排名然后选topk进行评估指标的计算。默认是不进行负采样的而是对所有的项目的得分进行排序
 repeatable: False               # (bool) Whether to evaluate results with a repeatable recommendation scene.
 metrics: ["NDCG","Hit"]  # (list or str) Evaluation metrics.
 topk: [5,10,20]                      # (list or int or None) The value of k for topk evaluation metrics.
@@ -57,10 +55,4 @@ valid_metric: NDCG@10            # (str) The evaluation metric for early stoppin
 valid_metric_bigger: True       # (bool) Whether to take a bigger valid metric value as a better result.
 eval_batch_size: 512           # (int) The evaluation batch size.
 metric_decimal_place: 4         # (int) The decimal place of metric scores.
-#微信通知
-wechat_args:
-  send_result: true
-  send_status: true
-  status_epoch: 20
-  webhook: 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=6b65c26a-1314-4708-8fbf-03fa1ecb979e'
 log_trans_time: False
