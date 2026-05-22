@@ -54,9 +54,9 @@ class AHRec(SequentialRecommender):
         self.item_embedding = nn.Embedding(
             self.n_items + 1, self.hidden_size, padding_idx=0
         )
-        self.position_embedding = nn.Embedding(self.max_seq_length + 1, self.hidden_size)  #后面加一位是为了生成预测交互的位置向量
+        self.position_embedding = nn.Embedding(self.max_seq_length + 1, self.hidden_size)
         self.time_interval_embedding = nn.Embedding(self.bukkit_num + 1, self.hidden_size,
-                                                    padding_idx=self.bukkit_num)  # 多出来一个用来放未来交互的填充位
+                                                    padding_idx=self.bukkit_num)
         self.trm_encoder = TimeAwareEncoder(
             n_layers=self.n_layers,
             n_heads=self.n_heads,
@@ -125,7 +125,7 @@ class AHRec(SequentialRecommender):
         self.uniform_thr = config['generator_args']['uniform_thr']
         asc_std_slist = dataset.asc_std_slist
         no_aug_num = int(len(asc_std_slist) * self.uniform_thr)
-        self.no_aug_seq = set(asc_std_slist[: no_aug_num])  #用于记录哪些序列被认为是均匀的，不需要数据增强的
+        self.no_aug_seq = set(asc_std_slist[: no_aug_num])
         self.SEQ_ID_LIST = "sid"
         augment_name = config['data_augment']
         data_augment = get_data_augment(augment_name)
@@ -240,7 +240,7 @@ class AHRec(SequentialRecommender):
         input_emb = item_emb + position_embedding
         input_emb = self.LayerNorm(input_emb)
         input_emb = self.dropout(input_emb)
-        extended_attention_mask = self.get_attention_mask(item_seq, bidirectional=True)  # 不同的地方就是掩码是双向掩码
+        extended_attention_mask = self.get_attention_mask(item_seq, bidirectional=True)
         trm_output = self.normal_trm_encoder(
             input_emb, extended_attention_mask, output_all_encoded_layers=True
         )
@@ -413,7 +413,7 @@ class AHRec(SequentialRecommender):
         else:  # self.loss_type = 'CE'
             test_item_emb = self.item_embedding.weight
             all_outputs = torch.cat([raw_seq_output, aug_seq_output], dim=0)
-            all_logits = torch.matmul(all_outputs, test_item_emb.transpose(0, 1))  #(batch,item_num)
+            all_logits = torch.matmul(all_outputs, test_item_emb.transpose(0, 1))  # (batch,item_num)
             batch_size = raw_seq_output.size(0)
             raw_logits = all_logits[:batch_size, :]
             aug_logits = all_logits[batch_size:, :]
@@ -446,7 +446,7 @@ class AHRec(SequentialRecommender):
         neg_output = seq_output.unsqueeze(1).transpose(1, 2)  #(batch_size,hidden_size,1)
         neg_scores = torch.matmul(neg_item_embeds, neg_output).squeeze(2)  #(batch,neg_num)
         pos_scores = pos_scores.unsqueeze(1)  #(batch_size,1)
-        scores = torch.cat([pos_scores, neg_scores], dim=1)  #将正负样本的得分按列组合(batch,(neg_num+1))
+        scores = torch.cat([pos_scores, neg_scores], dim=1)
         return scores
 
     def full_sort_predict(self, interaction):
