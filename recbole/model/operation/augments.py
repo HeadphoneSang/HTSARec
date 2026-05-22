@@ -56,7 +56,6 @@ class TiInsertAugmentation(DataAugmentation):
             pre_insert_pos = max_len - seq_len - 1
             new_insert_pos = []
             for insert_pos in insert_positions:
-                # 构建新的序列
                 insert_pos = insert_pos.item()
                 insert_seq = origin_item_seq[i, pre_insert_pos + 1:insert_pos + 1]
                 insert_time_seq = origin_time_seq[i, pre_insert_pos + 1:insert_pos + 1]
