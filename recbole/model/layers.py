@@ -213,7 +213,7 @@ class BiGNNLayer(nn.Module):
 
     def forward(self, lap_matrix, eye_matrix, features):
         # for GCF ajdMat is a (N+M) by (N+M) mat
-        # lap_matrix L = D^-1(A)D^-1 # 拉普拉斯矩阵
+        # lap_matrix L = D^-1(A)D^-1 #
         x = torch.sparse.mm(lap_matrix, features)
 
         inter_part1 = self.linear(features + x)
@@ -373,67 +373,41 @@ class VanillaAttention(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
-    """
-    多头自注意力层，包含注意力分数的dropout机制。
-
-    参数:
-        input_tensor (torch.Tensor): 多头自注意力层的输入张量
-        attention_mask (torch.Tensor): 输入张量的注意力掩码
-
-    返回:
-        hidden_states (torch.Tensor): 多头自注意力层的输出
-    """
 
     def __init__(
             self,
-            n_heads,  # 注意力头的数量
-            hidden_size,  # 隐藏层维度
-            hidden_dropout_prob,  # 隐藏层dropout概率
-            attn_dropout_prob,  # 注意力分数dropout概率
-            layer_norm_eps,  # 层归一化的epsilon值
+            n_heads,
+            hidden_size,
+            hidden_dropout_prob,
+            attn_dropout_prob,
+            layer_norm_eps,
     ):
         super(MultiHeadAttention, self).__init__()
-        # 确保隐藏层维度能被注意力头数量整除
         if hidden_size % n_heads != 0:
             raise ValueError(
                 "The hidden size (%d) is not a multiple of the number of attention "
                 "heads (%d)" % (hidden_size, n_heads)
             )
 
-        # 初始化注意力头相关参数
         self.num_attention_heads = n_heads
-        self.attention_head_size = int(hidden_size / n_heads)  # 每个注意力头的维度
-        self.all_head_size = self.num_attention_heads * self.attention_head_size  # 所有注意力头的总维度
-        self.sqrt_attention_head_size = math.sqrt(self.attention_head_size)  # 缩放因子，用于缩放点积注意力
-
-        # 线性变换层，用于生成query、key和value
+        self.attention_head_size = int(hidden_size / n_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.sqrt_attention_head_size = math.sqrt(self.attention_head_size)
         self.query = nn.Linear(hidden_size, self.all_head_size)
         self.key = nn.Linear(hidden_size, self.all_head_size)
         self.value = nn.Linear(hidden_size, self.all_head_size)
 
-        # 注意力机制组件
-        self.softmax = nn.Softmax(dim=-1)  # 用于将注意力分数转换为概率分布
-        self.attn_dropout = nn.Dropout(attn_dropout_prob)  # 注意力分数的dropout
+        self.softmax = nn.Softmax(dim=-1)
+        self.attn_dropout = nn.Dropout(attn_dropout_prob)
 
-        # 输出层
-        self.LayerNorm = nn.LayerNorm(hidden_size, eps=layer_norm_eps)  # 层归一化
-        # self.dense = nn.Linear(hidden_size,hidden_size)
-        # self.drop = nn.Dropout(hidden_dropout_prob)
+        self.LayerNorm = nn.LayerNorm(hidden_size, eps=layer_norm_eps)
 
     def transpose_for_scores(self, x):
-        """
-        将原本输入形状为(batch_size,seq_len,hidden_size)的三维矩阵重构为(batch_size,seq_len,head_num,head_hidden_size)
-        Args:
-            x: (batch_size, seq_len, hidden_size)
-
-        Returns: 返回重构后的矩阵(batch_size,seq_len,head_num,head_hidden_size)
-
-        """
         new_x_shape = x.size()[:-1] + (
             self.num_attention_heads,
             self.attention_head_size,
-        )  #元组加法(batch_size,seq_len) + (head_num,head_hidden_size) = (batch_size,seq_len,head_num,head_hidden_size)
-        x = x.view(*new_x_shape)  #从行到列的重构矩阵
+        )
+        x = x.view(*new_x_shape)
         return x
 
     def forward(self, input_tensor, attention_mask):
@@ -442,7 +416,7 @@ class MultiHeadAttention(nn.Module):
         mixed_value_layer = self.value(input_tensor)
 
         query_layer = self.transpose_for_scores(mixed_query_layer).permute(0, 2, 1,
-                                                                           3)  #等价于transpose(1，2) 结果的query_layer[batch,h_num,seq_len,h_dim]
+                                                                           3)
         key_layer = self.transpose_for_scores(mixed_key_layer).permute(0, 2, 3, 1)
         value_layer = self.transpose_for_scores(mixed_value_layer).permute(0, 2, 1, 3)
 
@@ -522,20 +496,12 @@ class FeedForward(nn.Module):
         return x * torch.sigmoid(x)
 
     def forward(self, input_tensor):
-        """
-        两个线性一个非线性和一个LN和一个DROP
-        Args:
-            input_tensor:
+        hidden_states = self.dense_1(input_tensor)
+        hidden_states = self.intermediate_act_fn(hidden_states)
 
-        Returns:
-
-        """
-        hidden_states = self.dense_1(input_tensor)  #先升维
-        hidden_states = self.intermediate_act_fn(hidden_states)  #非线性变换
-
-        hidden_states = self.dense_2(hidden_states)  #降维
-        hidden_states = self.dropout(hidden_states)  #drop
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)  #残差
+        hidden_states = self.dense_2(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
 
         return hidden_states
 
@@ -565,7 +531,7 @@ class TransformerLayer(nn.Module):
             layer_norm_eps,
     ):
         super(TransformerLayer, self).__init__()
-        self.multi_head_attention = MultiHeadAttention(  #这里改成TimeAwareMutilAttentionLayer
+        self.multi_head_attention = MultiHeadAttention(
             n_heads, hidden_size, hidden_dropout_prob, attn_dropout_prob, layer_norm_eps
         )
         self.feed_forward = FeedForward(
@@ -577,111 +543,64 @@ class TransformerLayer(nn.Module):
         )
 
     def forward(self, hidden_states, attention_mask):
-        attention_output = self.multi_head_attention(hidden_states, attention_mask)  #多头已经进行线性性变换进行多头特征融合了，也进行了残差连接
-        feedforward_output = self.feed_forward(attention_output)  #这里再经过一个线性和非线性层，也进行了残差连接
+        attention_output = self.multi_head_attention(hidden_states, attention_mask)
+        feedforward_output = self.feed_forward(attention_output)
         return feedforward_output
 
 
 class TimeAwareMultiHeadAttention(nn.Module):
-    """
-    考虑了交互序列项目之间时间间隔的多头注意力层
-    """
-
     def __init__(
             self,
             n_heads,
             hidden_size,
-            hidden_dropout_prob,  # 隐藏层dropout概率
+            hidden_dropout_prob,
             attn_dropout_prob,
             layer_norm_eps,
     ):
-        """
-        Args:
-            n_heads: 多头的个数
-            hidden_size: 输入和输出的隐藏表示的维度大小
-            hidden_dropout_prob: 隐藏表示的丢弃率
-            attn_dropout_prob: 注意力系数的丢弃率
-            layer_norm_eps: 层归一化的分母极小值
-        """
         super(TimeAwareMultiHeadAttention, self).__init__()
-        # 确保隐藏层维度能被注意力头数量整除
         if hidden_size % n_heads != 0:
             raise ValueError(
                 "The hidden size (%d) is not a multiple of the number of attention "
                 "heads (%d)" % (hidden_size, n_heads)
             )
 
-        # 初始化注意力头相关参数
         self.num_attention_heads = n_heads
-        self.attention_head_size = int(hidden_size / n_heads)  # 每个注意力头的维度
-        self.all_head_size = self.num_attention_heads * self.attention_head_size  # 所有注意力头的总维度
-        self.sqrt_attention_head_size = math.sqrt(self.attention_head_size)  # 缩放因子，用于缩放点积注意力
+        self.attention_head_size = int(hidden_size / n_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.sqrt_attention_head_size = math.sqrt(self.attention_head_size)
 
-        # 线性变换层，用于生成query、key和value
         self.query = nn.Linear(hidden_size, self.all_head_size)
         self.key = nn.Linear(hidden_size, self.all_head_size)
         self.value = nn.Linear(hidden_size, self.all_head_size)
-        self.t_key = nn.Linear(hidden_size, hidden_size)  #时间间隔矩阵的KEY线性变换矩阵
-        self.t_value = nn.Linear(hidden_size, hidden_size)  #时间间隔矩阵VALUE线性变换矩阵
+        self.t_key = nn.Linear(hidden_size, hidden_size)
+        self.t_value = nn.Linear(hidden_size, hidden_size)
 
-        # 注意力机制组件
-        self.softmax = nn.Softmax(dim=-1)  # 用于将注意力分数转换为概率分布
-        self.attn_dropout = nn.Dropout(attn_dropout_prob)  # 注意力分数的dropout
+        self.softmax = nn.Softmax(dim=-1)
+        self.attn_dropout = nn.Dropout(attn_dropout_prob)
 
-        # 输出层
-        self.LayerNorm = nn.LayerNorm(hidden_size, eps=layer_norm_eps)  # 层归一化
+        self.LayerNorm = nn.LayerNorm(hidden_size, eps=layer_norm_eps)
 
     def transpose_for_scores(self, x):
-        """
-        将原本输入形状为(batch_size,seq_len,hidden_size)的三维矩阵重构为(batch_size,seq_len,head_num,head_hidden_size)
-        Args:
-            x: (batch_size, seq_len, hidden_size)
-
-        Returns: 返回重构后的矩阵(batch_size,seq_len,head_num,head_hidden_size)
-
-        """
         new_x_shape = x.size()[:-1] + (
             self.num_attention_heads,
             self.attention_head_size,
-        )  #元组加法(batch_size,seq_len) + (head_num,head_hidden_size) = (batch_size,seq_len,head_num,head_hidden_size)
-        x = x.view(*new_x_shape)  #从行到列的重构矩阵
+        )
+        x = x.view(*new_x_shape)
         return x
 
     def transpose_intervals_for_scores(self, interval_tensor):
-        """
-        将时间间隔张量(batch,seq_len,seq_len,hidden_size)重构成(batch,seq_len,seq_len,head_num,attention_head_size)
-        Args:
-            interval_tensor: 离散后时间间隔张量
-
-        Returns: 返回(batch,seq_len,seq_len,head_num,attention_head_size)
-        """
         new_shape = interval_tensor.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         interval_tensor = interval_tensor.view(*new_shape)
         return interval_tensor
 
     def forward(self, inter_hidden_states, interval_hidden_states, attention_mask):
-        """
-        带时间间隔的注意力机制前向传播
-        加入了一个新的时间间隔矩阵的信息，使得内存的开销增大了，但是时间复杂度没变，因为注意力的点积计算仍然是一个向量乘N个向量，所以QKV的计算的时间复杂度不变
-        但是前面线性变换的时候，对时间间隔矩阵进行QK计算的时间复杂度开销改变，原来一次线性变换是O(L*d^2)，但是现在增加了一个L长度的维度，所以时间复杂度是O(L^2 * d^2)
-        Args:
-            inter_hidden_states: 用户交互隐层表示 (batch, seq_len, hidden_size)
-            interval_hidden_states: 时间间隔嵌入 (batch, seq_len, seq_len, hidden_size)
-            attention_mask: 用于屏蔽注意力的mask（未使用）
-
-        Returns:
-            multi_qk: 注意力得分矩阵 (batch, head_num, seq_len, seq_len)
-        """
-        # 基本的用户交互 QKV 矩阵，转换的时间复杂度是O(L * d^2)
         mixed_inter_query = self.query(inter_hidden_states)
         mixed_inter_key = self.key(inter_hidden_states)
         mixed_inter_value = self.value(inter_hidden_states)
 
-        # 基本的用户交互时间间隔 KV 矩阵的时间复杂度O(L^2 * d^2)
         mixed_intervals_key = self.t_key(interval_hidden_states)
         mixed_intervals_value = self.t_value(interval_hidden_states)
 
-        # 拆分为多头注意力结构 时间复杂度 O(1)
         mixed_inter_query = self.transpose_for_scores(mixed_inter_query).transpose(1, 2)
         mixed_inter_key = self.transpose_for_scores(mixed_inter_key).transpose(1, 2)  #(batch,head_num,seq_len,att_size)
         mixed_intervals_key = self.transpose_intervals_for_scores(mixed_intervals_key).transpose(1, 3)  # (batch,
@@ -689,81 +608,61 @@ class TimeAwareMultiHeadAttention(nn.Module):
         mixed_inter_value = self.transpose_for_scores(mixed_inter_value).transpose(1, 2)
         mixed_intervals_value = self.transpose_intervals_for_scores(mixed_intervals_value).transpose(1, 3)
 
-        # 扩展并融合时间信息 时间复杂度O（1）
-        mixed_inter_key = mixed_inter_key.unsqueeze(2)  #删除expands_as操作节省现存
+        mixed_inter_key = mixed_inter_key.unsqueeze(2)
         key_total = mixed_inter_key + mixed_intervals_key
         mixed_inter_value = mixed_inter_value.unsqueeze(2)
         multi_value_total = mixed_inter_value + mixed_intervals_value  #(batch,head_num,seq_len,seq_len,att_size)
 
-        # QK^T 注意力系数计算 时间复杂度是O(L^2 * d)
         mixed_inter_query = mixed_inter_query.unsqueeze(3)
         multi_qk = torch.matmul(mixed_inter_query, key_total.transpose(3, 4)).squeeze(
             3)  #(batch,head_num,seq_len,seq_len)
         multi_qk = multi_qk / self.sqrt_attention_head_size  #(batch,head_num,seq_len,seq_len)
-        multi_qk = multi_qk + attention_mask  #上三角掩码
+        multi_qk = multi_qk + attention_mask
         attention_scores = self.softmax(multi_qk)
-        attention_scores = self.attn_dropout(attention_scores)  #对每个头的注意力系数分别进行随机丢弃，防止过拟合，防止模型复杂性过高
+        attention_scores = self.attn_dropout(attention_scores)
 
-        # 通过注意力系数计算最后的交互的隐藏表示
-        attention_scores = attention_scores.unsqueeze(3)  #将注意力系数升维(batch,head_num,seq_len,1,seq_len)
+        attention_scores = attention_scores.unsqueeze(3)  # (batch,head_num,seq_len,1,seq_len)
         attention_embeddings = torch.matmul(attention_scores, multi_value_total).squeeze(3)  # (batch,head_num,
         # seq_len,attn_size)
         attention_embeddings = attention_embeddings.transpose(1, 2).contiguous()  # (batch, seq_len, head_num,
         # attn_size)
         attention_embeddings = attention_embeddings.view(inter_hidden_states.shape)  #(batch,seq_len,hidden_size)
-        #对通过多头注意力处理后得到的注意力隐藏表示进行线性变换
-        final_hidden_states = self.LayerNorm(inter_hidden_states + attention_embeddings)  #加了残差链接
+
+        final_hidden_states = self.LayerNorm(inter_hidden_states + attention_embeddings)
         return final_hidden_states
 
     def forward0(self, inter_hidden_states, interval_hidden_states, attention_mask):
-        """
-        和上面的一样，只是V不再包含时间间隔信息，我认为如果不用霍克斯过程，单纯的计算相似度，时间间隔信息应该会引入噪声
-        Args:
-            inter_hidden_states: 用户交互隐层表示 (batch, seq_len, hidden_size)
-            interval_hidden_states: 时间间隔嵌入 (batch, seq_len, seq_len, hidden_size)
-            attention_mask: 用于屏蔽注意力的mask（未使用）
-
-        Returns:
-            multi_qk: 注意力得分矩阵 (batch, head_num, seq_len, seq_len)
-        """
-        # 基本的用户交互 QKV 矩阵
         mixed_inter_query = self.query(inter_hidden_states)
         mixed_inter_key = self.key(inter_hidden_states)
         mixed_inter_value = self.value(inter_hidden_states)
 
-        # 基本的用户交互时间间隔 KV 矩阵
         mixed_intervals_key = self.t_key(interval_hidden_states)
 
-        # 拆分为多头注意力结构
         mixed_inter_query = self.transpose_for_scores(mixed_inter_query).transpose(1, 2)
         mixed_inter_key = self.transpose_for_scores(mixed_inter_key).transpose(1, 2)  #(batch,head_num,seq_len,att_size)
         mixed_intervals_key = self.transpose_intervals_for_scores(mixed_intervals_key).transpose(1, 3)  # (batch,
         # head_num,seq_len,seq_len,att_size)
         mixed_inter_value = self.transpose_for_scores(mixed_inter_value).transpose(1, 2)
 
-        # 扩展并融合时间信息
-        mixed_inter_key = mixed_inter_key.unsqueeze(2)  #删除expands_as操作节省现存
+        mixed_inter_key = mixed_inter_key.unsqueeze(2)
         key_total = mixed_inter_key + mixed_intervals_key
         mixed_inter_value = mixed_inter_value
         multi_value_total = mixed_inter_value
 
-        # QK^T 注意力系数计算
         mixed_inter_query = mixed_inter_query.unsqueeze(3)
         multi_qk = torch.matmul(mixed_inter_query, key_total.transpose(3, 4)).squeeze(
             3)  #(batch,head_num,seq_len,seq_len)
         multi_qk = multi_qk / self.sqrt_attention_head_size  #(batch,head_num,seq_len,seq_len)
-        multi_qk = multi_qk + attention_mask  #上三角掩码
+        multi_qk = multi_qk + attention_mask
         attention_scores = self.softmax(multi_qk)
-        attention_scores = self.attn_dropout(attention_scores)  #对每个头的注意力系数分别进行随机丢弃，防止过拟合，防止模型复杂性过高
+        attention_scores = self.attn_dropout(attention_scores)
 
-        # 通过注意力系数计算最后的交互的隐藏表示
         attention_embeddings = torch.matmul(attention_scores, multi_value_total)  # (batch,head_num,
         # seq_len,attn_size)
         attention_embeddings = attention_embeddings.transpose(1, 2).contiguous()  # (batch, seq_len, head_num,
         # attn_size)
         attention_embeddings = attention_embeddings.view(inter_hidden_states.shape)  #(batch,seq_len,hidden_size)
-        #对通过多头注意力处理后得到的注意力隐藏表示进行线性变换
-        final_hidden_states = self.LayerNorm(inter_hidden_states + attention_embeddings)  #加了残差链接
+        final_hidden_states = self.LayerNorm(inter_hidden_states + attention_embeddings)
         return final_hidden_states
 
 
@@ -779,16 +678,6 @@ class TimeAwareLayer(nn.Module):
             hidden_act,
             layer_norm_eps,
     ):
-        """
-        Args:
-            n_heads: 多头注意力的头的数目
-            hidden_size: 隐藏状态的维度大小
-            intermediate_size: FFN层的中间隐藏层的维度
-            hidden_dropout_prob: 隐藏层的丢弃率
-            attn_dropout_prob: 注意力系数的丢弃率
-            hidden_act: 隐藏层的激活函数
-            layer_norm_eps: 层归一化的极小值
-        """
         super(TimeAwareLayer, self).__init__()
         self.multi_head_attention = TimeAwareMultiHeadAttention(
             n_heads, hidden_size, hidden_dropout_prob, attn_dropout_prob, layer_norm_eps
@@ -802,37 +691,12 @@ class TimeAwareLayer(nn.Module):
         )
 
     def forward(self, inter_hidden_states, intervals_hidden_states, attention_mask):
-        """
-
-        Args:
-            attention_mask: 多头上三角掩码
-            inter_hidden_states: 用户交互序列的隐藏状态 (batch,seq_len,hidden_size)
-            intervals_hidden_states: 用户交互序列对应的时间间隔隐藏状态矩阵 (batch,seq_len,seq_len,hidden_size)
-
-        Returns:
-
-        """
         attention_output = self.multi_head_attention(inter_hidden_states, intervals_hidden_states, attention_mask)
-        #注意力层也加了残差连接和LayerNorma线性变化对特征进行融合
-        #z经过层归一化后的注意力表示
-        feedforward_output = self.feed_forward(attention_output)  #对注意力表示进行线性和非线性变换，包含了残差链接和LayerNormal
-        return feedforward_output  #这里不需要残差连接了，因为ffN里面已经进行残差了 attention_output + ffn(attn..)
+        feedforward_output = self.feed_forward(attention_output)
+        return feedforward_output
 
 
 class TimeAwareEncoder(nn.Module):
-    r"""
-    TimeAwareEncoder 由多个 TimeAwareLayer叠加而成。
-
-    参数说明：
-        n_layers (int, 可选)：TimeAwareEncoder 编码器中的层数。默认值为 1。
-        n_heads (int, 可选)：每层多头注意力机制中的注意力头数量。默认值为 2。
-        hidden_size (int, 可选)：输入和输出的隐藏状态维度。默认值为 64。
-        inner_size (int, 可选)：前馈神经网络中间层的维度。默认值为 256。
-        hidden_dropout_prob (float, 可选)：隐藏层中每个元素被置为 0 的概率（即 Dropout 概率）。默认值为 0.5。
-        attn_dropout_prob (float, 可选)：注意力分数被置为 0 的概率（Dropout）。默认值为 0.5。
-        hidden_act (str, 可选)：前馈网络中的激活函数。可选值包括：'gelu', 'relu', 'swish', 'tanh', 'sigmoid'。默认值为 'gelu'。
-        layer_norm_eps (float, 可选)：层归一化中为了数值稳定性添加到分母的小值。默认值为 1e-12。
-    """
 
     def __init__(self, n_layers=1, n_heads=2, hidden_size=64, inner_size=256, hidden_dropout_prob=0.5,
                  attn_dropout_prob=0.5, hidden_act="gelu", layer_norm_eps=1e-12,
@@ -850,17 +714,6 @@ class TimeAwareEncoder(nn.Module):
         self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(n_layers)])
 
     def forward(self, inter_hidden_states, intervals_hidden_states, attention_mask, output_all_encoded_layers=True):
-        """
-        Args:
-            inter_hidden_states (torch.Tensor): 用户交互序列的隐藏表示
-            intervals_hidden_states (torch.Tensor): 用户交互时间间隔的隐藏表示
-            attention_mask (torch.Tensor): 输入隐藏状态的注意力掩码
-            output_all_encoded_layers (Bool): 是否输出所有Transformer层的输出
-
-        Returns:
-            all_encoder_layers (List): 如果output_all_encoded_layers为True，则返回一个包含所有Transformer层输出的列表；
-            否则返回一个仅包含最后一个Transformer层输出的列表。
-        """
         all_encoder_layers = []
         for layer_module in self.layer:
             inter_hidden_states = layer_module(inter_hidden_states, intervals_hidden_states, attention_mask)

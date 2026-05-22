@@ -75,7 +75,7 @@ class MaskItemSequence:
 
     def _padding_sequence(self, sequence, max_length):
         pad_len = max_length - len(sequence)
-        sequence = [0] * pad_len + sequence  #就是将每个序列填充到统一大小，从前面用0填充，如果少的填充，多的截断，从前面截断
+        sequence = [0] * pad_len + sequence
         sequence = sequence[-max_length:]  # truncate according to the max_length
         return sequence
 
@@ -124,32 +124,31 @@ class MaskItemSequence:
 
     def __call__(self, dataset, interaction):
         """
-        对原始的交互序列进行随机的掩码操作
+        Perform a random mask operation on the original interaction sequence
         Args:
-            dataset: 对应的数据集，比如是训练集，验证机或者测试集
-            interaction: 原始的一个batch的交互
-
-        Returns: 返回处理后的交互，包含了掩码交互序列，掩码位置，掩码项目，掩码负采样项目
-
+            dataset: The corresponding datasets, such as training sets, validators or test sets
+            interaction: The interaction of an original batch
+        Returns: Return the processed interaction,
+        which includes the mask interaction sequence, mask position, mask item, and mask negative sampling item
         """
         item_seq = interaction[self.ITEM_SEQ]
         device = item_seq.device
         batch_size = item_seq.size(0)
         n_items = dataset.num(self.ITEM_ID)
         sequence_instances = item_seq.cpu().numpy().tolist()
-        #获得对应批次的所有用户交互序列的list列表矩阵
 
         # Masked Item Prediction
         # [B * Len]
-        masked_item_sequence = []  #存放每一个被掩码后的序列，形状和输入的item_seq相等。里面就是标记了掩码的位置
-        pos_items = []  #(batch,mask_item_len) 存放每个序列被掩码的项目的id
-        neg_items = []  #(batch,mask_item_len) 存放每个序列被掩码的项目的下标
-        masked_index = []  #(batch,mask_item_len) 存放每个序列被掩码的项目的负采样样本的id
+        masked_item_sequence = []  # Store each masked sequence with a shape equal to the input item_seq.
+        # Inside is the position marked with the mask
+        pos_items = []  #(batch,mask_item_len)
+        neg_items = []  #(batch,mask_item_len)
+        masked_index = []  #(batch,mask_item_len)
 
-        if random.random() < self.ft_ratio:  #只在最后一位加掩码，我用不到，可以注释掉
+        if random.random() < self.ft_ratio:
             interaction = self._append_mask_last(interaction, n_items, device)
         else:
-            for instance in sequence_instances:  #便利整个batch，对每一个交互序列进行处理
+            for instance in sequence_instances:
                 # WE MUST USE 'copy()' HERE!
                 masked_sequence = instance.copy()
                 pos_item = []
@@ -157,34 +156,26 @@ class MaskItemSequence:
                 index_ids = []
                 for index_id, item in enumerate(instance):
                     # padding is 0, the sequence is end
-                    if item == 0:  #这里我需要改改，我是从前面padding的，应该是先略过0，然后才开始操作
+                    if item == 0:
                         break
                     prob = random.random()
                     if prob < self.mask_ratio:
-                        """
-                        通过随机数，对每一个位置进行掩码与否的操作
-                        如果掩码:
-                        先将当前位置的原始交互项目id放进pos_item的list中
-                        然后对当前位置进行负采样，将负采样的数据放进neg_item的list中
-                        并且将当前位置设置为掩码占位符，并且将当前位置的下标记录到一个临时的index_ids的list里面
-                        """
                         pos_item.append(item)
-                        neg_item.append(self._neg_sample(instance, n_items))  #这里采样一个负样本，可以通过一个超惨控制
-                        masked_sequence[index_id] = n_items  #将当前位置替换为掩码占位符
+                        neg_item.append(self._neg_sample(instance, n_items))
+                        masked_sequence[index_id] = n_items
                         index_ids.append(index_id)
 
                 masked_item_sequence.append(masked_sequence)
 
-                #下面三个向量都是[mask_item_len,]对应位置分别代表，掩码的下标，掩码的项目和负采样的项目
                 pos_items.append(
                     self._padding_sequence(pos_item, self.mask_item_length)
-                )  #记录掩码的位置原来的项目id，并且统一处理为最大掩码长度，多的话就舍弃前面部分的掩码
+                )
                 neg_items.append(
                     self._padding_sequence(neg_item, self.mask_item_length)
-                )  #和上面相同，就是记录的负采样样本
+                )
                 masked_index.append(
                     self._padding_sequence(index_ids, self.mask_item_length)
-                )  #和上面一样，就是记录的掩码的下标的位置
+                )
 
             # [B Len]
             masked_item_sequence = torch.tensor(
@@ -208,7 +199,7 @@ class MaskItemSequence:
                 self.NEG_ITEMS: neg_items,
                 self.MASK_INDEX: masked_index,
             }
-            interaction.update(Interaction(new_dict))  #将新构建的这些属性追加到原始的interaction后面，不改变原来的已有的内容
+            interaction.update(Interaction(new_dict))
         return interaction
 
 
@@ -225,24 +216,13 @@ class MaskItemSequenceSampleNeg(MaskItemSequence):
     def _padding_neg_sequence(self, sequence, max_length):
         pad_len = max_length - len(sequence)
         padding_v = [0] * self.neg_sample_num
-        sequence = [padding_v] * pad_len + sequence  #就是将每个序列填充到统一大小，从前面用0填充，如果少的填充，多的截断，从前面截断
+        sequence = [padding_v] * pad_len + sequence
         sequence = sequence[-max_length:]  # truncate according to the max_length
         return sequence
 
     def get_negative_candidates(self, item_seq, all_items):
-        """
-        返回不包含item_seq的item_id集合
-        Args:
-            item_seq:  用户交互列表
-            all_items:  所有项目
-
-        Returns: 不包含用户交互的item列表
-
-        """
         return all_items
         # return list(all_items - set(item_seq))
-
-    import numpy as np
 
     def n_neg_sample(self, neg_item_list):
         return np.random.choice(neg_item_list, size=self.neg_sample_num, replace=False)
@@ -251,13 +231,7 @@ class MaskItemSequenceSampleNeg(MaskItemSequence):
         if self.config["data_augment"] != "hawkes_insert":
             return interaction
         """
-        对原始的交互序列进行随机的掩码操作
-        Args:
-            dataset: 对应的数据集，比如是训练集，验证机或者测试集
-            interaction: 原始的一个batch的交互
-
-        Returns: 返回处理后的交互，包含了掩码交互序列，掩码位置，掩码项目，掩码负采样项目
-
+        Perform a random mask operation on the original interaction sequence
         """
 
         item_seq = interaction[self.ITEM_SEQ]  #(batch,seq_len)
@@ -265,28 +239,21 @@ class MaskItemSequenceSampleNeg(MaskItemSequence):
         batch_size = item_seq.size(0)
         n_items = dataset.num(self.ITEM_ID)
         sequence_instances = item_seq.cpu().numpy().tolist()
-
-        #获得每个用户的负采样候选列表掩码
         if self.item_list is None:
             self.item_list = torch.arange(1, n_items, device=device, dtype=torch.long)
         pos_mask = (item_seq.unsqueeze(2) == self.item_list.unsqueeze(0).unsqueeze(1)).any(dim=1)
         neg_can_mask = ~pos_mask
-
-        # 获得对应批次的所有用户交互序列的list列表矩阵
-        masked_item_sequence = []  # 存放每一个被掩码后的序列，形状和输入的item_seq相等。里面就是标记了掩码的位置
-        pos_items = []  # (batch,mask_item_len) 存放每个序列被掩码的项目的id
-        neg_n = self.mask_item_length * self.neg_sample_num  #每个用户的采样数目
+        masked_item_sequence = []
+        pos_items = []  # (batch,mask_item_len)
+        neg_n = self.mask_item_length * self.neg_sample_num
         neg_items = torch.zeros(batch_size, neg_n, dtype=torch.long, device=device)
-        masked_index = []  # (batch,mask_item_len) 存放每个序列被掩码的项目的负采样样本的id
+        masked_index = []  # (batch,mask_item_len)
         index_s = np.arange(self.max_seq_length)
         # neg_can_list = interaction['neg_can_list'].cpu().numpy().tolist()
-        for batch_id, instance in enumerate(sequence_instances):  # 便利整个batch，对每一个交互序列进行处理
-            #为当前交互序列创建掩码负采样列表
+        for batch_id, instance in enumerate(sequence_instances):
             neg_items_list = self.item_list[neg_can_mask[batch_id]]
             idx = torch.randint(0, len(neg_items_list), (neg_n,))
             neg_items[batch_id] = neg_items_list[idx]
-
-            #创建掩码序列和掩码序列下标列表
             padding_mask = np.array(instance) != 0
             line_mask = (np.random.uniform(0, 1, size=self.max_seq_length) < self.mask_ratio) & padding_mask
             masked_sequence = np.array(instance)
@@ -295,13 +262,12 @@ class MaskItemSequenceSampleNeg(MaskItemSequence):
             masked_sequence[line_mask] = n_items
             masked_sequence = masked_sequence.tolist()
             masked_item_sequence.append(masked_sequence)
-            # 下面三个向量都是[mask_item_len,]对应位置分别代表，掩码的下标，掩码的项目和负采样的项目
             pos_items.append(
                 self._padding_sequence(pos_item, self.mask_item_length)
-            )  # 记录掩码的位置原来的项目id，并且统一处理为最大掩码长度，多的话就舍弃前面部分的掩码
+            )
             masked_index.append(
                 self._padding_sequence(index_ids, self.mask_item_length)
-            )  # 和上面一样，就是记录的掩码的下标的位置
+            )
 
         # [B Len]
         masked_item_sequence = torch.tensor(
@@ -321,23 +287,22 @@ class MaskItemSequenceSampleNeg(MaskItemSequence):
             self.NEG_ITEMS: neg_items,
             self.MASK_INDEX: masked_index,
         }
-        interaction.update(Interaction(new_dict))  # 将新构建的这些属性追加到原始的interaction后面，不改变原来的已有的内容
+        interaction.update(Interaction(new_dict))
         return interaction
 
     def set_random_sample(self, s, k):
         """
-        蓄水池负采样
+        Negative sampling of the reservoir
         Args:
-            k: 负采样的数目
-            s: 负采样的样本集合set
-        Returns: 返回负采样的集合
-
+            k: The number of negative samples
+            s: The sample set of negative sampling
+        Returns: Return the set of negative samples
         """
         assert k <= len(s)
         result = []
         it = iter(s)
         for _ in range(k):
-            result.append(next(it))  # 预先抽样第 k 个
+            result.append(next(it))
         for i, val in enumerate(it, k):
             j = random.randint(0, i)
             if j < k:
@@ -346,23 +311,23 @@ class MaskItemSequenceSampleNeg(MaskItemSequence):
 
     def neg_filter_sample(self, filtered_item_set, sample_num, min_id, max_id):
         """
-        进行一次指定数量的负采样，目标不包含filtered_item
-        这里采用随机采样后进行决绝策略判断的方法
-        最好情况时间复杂度是O(sample_num)
+        Perform a specified number of negative samplings, with the target not including filtered_item
+        Here, the method of determining the decision strategy after random sampling is adopted
+        The best-case time complexity is O(sample_num)
         Args:
-            filtered_item_set: 正样本set，要拒绝的样本
-            sample_num: 采样的数量
-            min_id: 随机采样的最小值
-            max_id: 随机采样的最大值
+            filtered_item_set: Positive sample set, the sample to be rejected
+            sample_num: number
+            min_id: min
+            max_id: max
 
-        Returns: 返回一个目标大小的id的list
+        Returns: list
 
         """
         assert max_id - min_id + 1 - len(filtered_item_set) >= sample_num, \
-            "采样空间太小，无法生成足够负样本"
+            "The sampling space is too small to generate enough negative samples"
         rand_ids = random.sample(range(min_id, max_id + 1), sample_num)
         sampled_set = set()
-        for i, rand_id in enumerate(rand_ids):  #或是构建一个set()用来记录当前的采样，如果有重的就重新采样
+        for i, rand_id in enumerate(rand_ids):
             while rand_id in filtered_item_set or rand_id in sampled_set:
                 rand_id = random.randint(min_id, max_id)
             rand_ids[i] = rand_id
@@ -370,58 +335,38 @@ class MaskItemSequenceSampleNeg(MaskItemSequence):
         return rand_ids
 
     def __call0__(self, dataset, interaction):
-        """
-        对原始的交互序列进行随机的掩码操作
-        1.对于每个序列，随机选mask_len * neg_n个样本，
-        然后拿每个位置的样本和每个位置的正样本比较，
-        最好的情况是O(mask_len*neg_n)的时间复杂度，最坏是O(mask_len*n*neg_n)
-        Args:
-            dataset: 对应的数据集，比如是训练集，验证机或者测试集
-            interaction: 原始的一个batch的交互
-
-        Returns: 返回处理后的交互，包含了掩码交互序列，掩码位置，掩码项目，掩码负采样项目
-
-        """
 
         item_seq = interaction[self.ITEM_SEQ]  #(batch,seq_len)
         device = item_seq.device
         batch_size = item_seq.size(0)
         n_items = dataset.num(self.ITEM_ID)
         sequence_instances = item_seq.cpu().numpy().tolist()
-        # 获得对应批次的所有用户交互序列的list列表矩阵
-        masked_item_sequence = []  # 存放每一个被掩码后的序列，形状和输入的item_seq相等。里面就是标记了掩码的位置
-        pos_items = []  # (batch,mask_item_len) 存放每个序列被掩码的项目的id
+        masked_item_sequence = []
+        pos_items = []  # (batch,mask_item_len)
         neg_items = []
-        masked_index = []  # (batch,mask_item_len) 存放每个序列被掩码的下标
+        masked_index = []  # (batch,mask_item_len)
         index_s = np.arange(self.max_seq_length)
-        neg_n = self.mask_item_length * self.neg_sample_num  # 每个用户的目标负采样数目
-        for batch_id, instance in enumerate(sequence_instances):  # 便利整个batch，对每一个交互序列进行处理
-            #创建掩码序列和掩码序列下标列表
-            padding_mask = np.array(instance) != 0  #标记出非掩码位置的元素为True
+        neg_n = self.mask_item_length * self.neg_sample_num
+        for batch_id, instance in enumerate(sequence_instances):
+            padding_mask = np.array(instance) != 0
             line_mask = (np.random.uniform(0, 1, size=self.max_seq_length) < self.mask_ratio) & padding_mask
-            #生成非padding位的随机掩码的掩码向量
             masked_sequence = np.array(instance)
-            pos_item = masked_sequence[line_mask].tolist()  #被掩码位置的正样本id的list
+            pos_item = masked_sequence[line_mask].tolist()
             index_ids = index_s[line_mask].tolist()
             masked_sequence[line_mask] = n_items
             masked_sequence = masked_sequence.tolist()
             masked_item_sequence.append(masked_sequence)
 
-            #对每个掩码位置进行负采样
             neg_list = self.neg_filter_sample(set(instance), neg_n, 1, dataset.item_num - 1)
-            # for cur_pos_item in pos_item:
-            #     cur_k_negs = self.neg_filter_sample(cur_pos_item, self.neg_sample_num, 1, dataset.item_num - 1)
-            #     neg_list.extend(cur_k_negs)
-            # 下面三个向量都是[mask_item_len,]对应位置分别代表，掩码的下标，掩码的项目和负采样的项目
             neg_items.append(
                 self._padding_sequence(neg_list, neg_n)
             )
             pos_items.append(
                 self._padding_sequence(pos_item, self.mask_item_length)
-            )  # 记录掩码的位置原来的项目id，并且统一处理为最大掩码长度，多的话就舍弃前面部分的掩码
+            )
             masked_index.append(
                 self._padding_sequence(index_ids, self.mask_item_length)
-            )  # 和上面一样，就是记录的掩码的下标的位置
+            )
 
         # [B Len]
         masked_item_sequence = torch.tensor(
@@ -441,7 +386,7 @@ class MaskItemSequenceSampleNeg(MaskItemSequence):
             self.NEG_ITEMS: neg_items,
             self.MASK_INDEX: masked_index,
         }
-        interaction.update(Interaction(new_dict))  # 将新构建的这些属性追加到原始的interaction后面，不改变原来的已有的内容
+        interaction.update(Interaction(new_dict))
         return interaction
 
 
