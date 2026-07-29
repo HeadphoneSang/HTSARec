@@ -1,0 +1,7 @@
+eval_args:
+  split: {'LS': 'valid_and_test'}
+  order: TO
+  mode: uni100
+  fast: True  # (bool) Whether to enable fast negative sampling, only for ranking scoring in sequential recommendation.
+  neg_field: 'neg_sample_ids'  # (str) The field name of negative samples.
+repeatable: True
